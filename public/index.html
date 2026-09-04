@@ -549,6 +549,55 @@
     letter-spacing:0.01em;
   }
 
+  /* ---------- my documents dashboard ---------- */
+  .doc-list{margin-top:8px;}
+  .doc-row{
+    display:grid;
+    grid-template-columns:5px 1fr;
+    gap:20px;
+    padding:20px 0;
+    border-bottom:1px solid var(--hairline);
+    cursor:pointer;
+  }
+  .doc-row:last-child{border-bottom:none;}
+  .doc-row:hover .doc-name{color:var(--amber);}
+  .doc-bar{border-radius:2px;}
+  .doc-bar.red{background:var(--red);}
+  .doc-bar.ochre{background:var(--ochre);}
+  .doc-bar.moss{background:var(--moss);}
+  .doc-main{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:16px;
+    flex-wrap:wrap;
+  }
+  .doc-name{
+    font-family:'IBM Plex Sans',sans-serif;
+    font-weight:500;
+    font-size:15.5px;
+    color:var(--ink);
+    transition:color 0.15s ease;
+  }
+  .doc-date{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12px;
+    color:var(--ink-soft);
+    white-space:nowrap;
+  }
+  .doc-counts{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12px;
+    color:var(--ink-soft);
+    margin-top:6px;
+  }
+  .doc-empty{
+    font-family:'Source Serif 4',serif;
+    font-size:15.5px;
+    color:var(--ink-soft);
+    padding:8px 0 4px;
+  }
+
   @media (max-width:680px){
     .scene h1{font-size:32px;}
     .stage-art{width:70vw; opacity:0.5;}
@@ -563,6 +612,7 @@
   <span class="wordmark"><span class="dot"></span>Decoder</span>
   <div class="topbar-right">
     <a href="#authSection" class="skip-link" id="skipLink">Skip intro</a>
+    <a href="#documentsSection" class="skip-link" id="docsLink" style="display:none;">My Documents</a>
     <span class="session-pill" id="sessionPill"></span>
   </div>
 </div>
@@ -663,6 +713,15 @@
   <section class="locked-section" id="lockedSection">
     <p>Sign in above to unlock the decoder.</p>
     <button id="lockedCta">Go to sign up</button>
+  </section>
+
+  <section class="tool-section" id="documentsSection" style="display:none;">
+    <div class="tool-head">
+      <p class="kicker">Decoder</p>
+      <h1>My Documents</h1>
+      <p class="sub">Every document you've decoded, saved here so you can find it again.</p>
+    </div>
+    <div class="doc-list" id="docsList"></div>
   </section>
 
   <section class="tool-section" id="toolSection" style="display:none;">
@@ -768,6 +827,9 @@ const sessionPill = document.getElementById('sessionPill');
 const lockedSection = document.getElementById('lockedSection');
 const toolSection = document.getElementById('toolSection');
 const authError = document.getElementById('authError');
+const docsLink = document.getElementById('docsLink');
+const documentsSection = document.getElementById('documentsSection');
+const docsList = document.getElementById('docsList');
 
 const tabSignup = document.getElementById('tabSignup');
 const tabLogin = document.getElementById('tabLogin');
@@ -801,6 +863,10 @@ function setAuthenticated(user) {
 
   lockedSection.style.display = 'none';
   toolSection.style.display = 'block';
+
+  docsLink.style.display = 'inline-block';
+  documentsSection.style.display = 'block';
+  loadDocuments();
 }
 
 function setSignedOut() {
@@ -809,6 +875,10 @@ function setSignedOut() {
   sessionPill.style.display = 'none';
   lockedSection.style.display = 'block';
   toolSection.style.display = 'none';
+
+  docsLink.style.display = 'none';
+  documentsSection.style.display = 'none';
+  docsList.innerHTML = '';
 }
 
 async function checkSession() {
@@ -891,6 +961,92 @@ document.getElementById('lockedCta').addEventListener('click', () => {
   document.getElementById('authSection').scrollIntoView({ behavior: 'smooth' });
 });
 
+docsLink.addEventListener('click', (e) => {
+  e.preventDefault();
+  documentsSection.scrollIntoView({ behavior: 'smooth' });
+});
+
+/* ============================= my documents dashboard ============================= */
+function formatDocDate(iso) {
+  try {
+    return new Date(iso).toLocaleDateString(undefined, {
+      year: 'numeric', month: 'short', day: 'numeric',
+    });
+  } catch {
+    return '';
+  }
+}
+
+function severityFor(counts) {
+  if (!counts) return 'moss';
+  if (counts.red > 0) return 'red';
+  if (counts.ochre > 0) return 'ochre';
+  return 'moss';
+}
+
+async function loadDocuments() {
+  try {
+    const res = await fetch('/api/documents');
+    if (!res.ok) return;
+    const data = await res.json();
+    renderDocsList(data.documents || []);
+  } catch (err) {
+    console.error('Could not load documents:', err);
+  }
+}
+
+function renderDocsList(documents) {
+  docsList.innerHTML = '';
+  if (documents.length === 0) {
+    docsList.innerHTML = '<p class="doc-empty">No documents yet — decode one below and it\'ll show up here.</p>';
+    return;
+  }
+  documents.forEach((doc) => {
+    const level = severityFor(doc.counts);
+    const row = document.createElement('div');
+    row.className = 'doc-row';
+    row.addEventListener('click', () => viewDocument(doc.id));
+
+    const bar = document.createElement('div');
+    bar.className = 'doc-bar ' + level;
+
+    const body = document.createElement('div');
+    const main = document.createElement('div');
+    main.className = 'doc-main';
+    const name = document.createElement('span');
+    name.className = 'doc-name';
+    name.textContent = doc.filename;
+    const date = document.createElement('span');
+    date.className = 'doc-date';
+    date.textContent = formatDocDate(doc.createdAt);
+    main.appendChild(name);
+    main.appendChild(date);
+
+    const counts = document.createElement('div');
+    counts.className = 'doc-counts';
+    const c = doc.counts || { red: 0, ochre: 0, moss: 0 };
+    counts.textContent = `${c.red} red flag${c.red === 1 ? '' : 's'} · ${c.ochre} to review · ${c.moss} standard`;
+
+    body.appendChild(main);
+    body.appendChild(counts);
+    row.appendChild(bar);
+    row.appendChild(body);
+    docsList.appendChild(row);
+  });
+}
+
+async function viewDocument(id) {
+  try {
+    const res = await fetch(`/api/documents/${id}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    renderResults(data);
+    toolSection.style.display = 'block';
+  } catch (err) {
+    console.error('Could not load document:', err);
+  }
+}
+
 /* ============================= decoder tool (unchanged logic) ============================= */
 const SAMPLE = `10. LATE FEES AND DEFAULT. If Rent is not received by the 3rd day of the month, Tenant shall pay a late fee of $150, plus $25 per additional day of delinquency, which the parties agree is a reasonable estimate of Landlord's damages and not a penalty. Tenant's failure to pay Rent within 5 days of the due date shall constitute a material default, entitling Landlord to terminate this Agreement without further notice and to accelerate all remaining Rent due under the term of this Lease, which shall become immediately due and payable. Landlord may, at its sole discretion, apply any security deposit toward accelerated Rent without waiving any other remedy available at law. Tenant waives any right to a grace period beyond that stated herein.
 14. ALTERATIONS AND SUBLETTING. Tenant shall not make any alterations, improvements, or install any fixtures without Landlord's prior written consent, which may be withheld for any reason or no reason. Any approved alterations become the property of Landlord upon installation and Tenant waives any claim to reimbursement or removal. Subletting or assignment of this Lease is prohibited without Landlord's written consent; a request for such consent shall be accompanied by a non-refundable $200 processing fee regardless of whether consent is granted.`;
@@ -912,8 +1068,10 @@ const pushbackSub = document.getElementById('pushbackSub');
 const pushbackBtn = document.getElementById('pushbackBtn');
 const pushbackResult = document.getElementById('pushbackResult');
 let lastFlaggedClauses = [];
+let currentFilename = null; // set when a file was uploaded; null for pasted/sample text
 sampleBtn.addEventListener('click', () => {
   docInput.value = SAMPLE;
+  currentFilename = null;
   docInput.focus();
 });
 resetBtn.addEventListener('click', () => {
@@ -921,6 +1079,7 @@ resetBtn.addEventListener('click', () => {
   errorEl.style.display = 'none';
   pushbackResult.innerHTML = '';
   lastFlaggedClauses = [];
+  currentFilename = null;
   docInput.value = '';
   docInput.focus();
   toolSection.scrollIntoView({ behavior: 'smooth' });
@@ -963,6 +1122,7 @@ fileInput.addEventListener('change', async () => {
     if (!response.ok) throw new Error(data.error || 'Could not read that file.');
 
     docInput.value = data.text;
+    currentFilename = data.filename;
     docInput.focus();
     statusEl.textContent = `Loaded "${data.filename}" — review below, then decode.`;
     setTimeout(() => { statusEl.style.display = 'none'; }, 3000);
@@ -1054,7 +1214,7 @@ async function analyze() {
     const response = await fetch("/api/decode", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({ text })
+      body: JSON.stringify({ text, filename: currentFilename })
     });
     if (response.status === 401) { setSignedOut(); throw new Error('Session expired — please sign in again.'); }
     if (!response.ok) {
@@ -1062,6 +1222,7 @@ async function analyze() {
     }
     const parsed = await response.json();
     renderResults(parsed);
+    loadDocuments();
   } catch (err) {
     console.error(err);
     showError(err.message === 'Session expired — please sign in again.' ? err.message : "Couldn't read that one — try again, or shorten the pasted text a bit.");

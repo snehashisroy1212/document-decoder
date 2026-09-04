@@ -23,6 +23,7 @@ const PORT = process.env.PORT || 3000;
 // ---------------------------------------------------------------------------
 const DATA_DIR = path.join(__dirname, 'data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
+const DOCUMENTS_FILE = path.join(DATA_DIR, 'documents.json');
 
 function ensureUsersFile() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -41,6 +42,45 @@ function loadUsers() {
 function saveUsers(users) {
   ensureUsersFile();
   fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), 'utf8');
+}
+
+function ensureDocumentsFile() {
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+  if (!fs.existsSync(DOCUMENTS_FILE)) fs.writeFileSync(DOCUMENTS_FILE, '[]', 'utf8');
+}
+
+function loadDocuments() {
+  ensureDocumentsFile();
+  try {
+    return JSON.parse(fs.readFileSync(DOCUMENTS_FILE, 'utf8'));
+  } catch {
+    return [];
+  }
+}
+
+function saveDocuments(documents) {
+  ensureDocumentsFile();
+  fs.writeFileSync(DOCUMENTS_FILE, JSON.stringify(documents, null, 2), 'utf8');
+}
+
+function countClauseLevels(clauses) {
+  const counts = { red: 0, ochre: 0, moss: 0 };
+  (clauses || []).forEach((c) => {
+    if (counts[c.level] !== undefined) counts[c.level]++;
+  });
+  return counts;
+}
+
+// Trimmed view of a document for list endpoints — leaves out clauses/questions
+// so the dashboard list stays light even with many saved documents.
+function documentSummaryView(doc) {
+  return {
+    id: doc.id,
+    filename: doc.filename,
+    createdAt: doc.createdAt,
+    summary: doc.summary,
+    counts: doc.counts,
+  };
 }
 
 function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
@@ -254,7 +294,7 @@ async function callGemini(prompt) {
 
 // Existing endpoint: analyze a document clause by clause (now requires sign-in)
 app.post('/api/decode', requireAuth, async (req, res) => {
-  const { text } = req.body;
+  const { text, filename } = req.body;
 
   if (!text || !text.trim()) {
     return res.status(400).json({ error: 'No document text provided.' });
@@ -288,11 +328,60 @@ ${text}
   try {
     const cleaned = await callGemini(prompt);
     const parsed = JSON.parse(cleaned);
+
+    // Save this result so it shows up in the user's document history.
+    try {
+      const documents = loadDocuments();
+      documents.push({
+        id: crypto.randomUUID(),
+        userId: req.session.userId,
+        filename: (filename && filename.trim()) || 'Pasted document',
+        createdAt: new Date().toISOString(),
+        summary: parsed.summary || '',
+        clauses: parsed.clauses || [],
+        questions: parsed.questions || [],
+        counts: countClauseLevels(parsed.clauses),
+      });
+      saveDocuments(documents);
+    } catch (saveErr) {
+      // Don't fail the request just because saving history failed —
+      // the user still gets their analysis either way.
+      console.error('Could not save document history:', saveErr);
+    }
+
     res.json(parsed);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Something went wrong reading that document.' });
   }
+});
+
+// My Documents dashboard — list of this user's past decode results
+app.get('/api/documents', requireAuth, (req, res) => {
+  const documents = loadDocuments()
+    .filter((d) => d.userId === req.session.userId)
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .map(documentSummaryView);
+  res.json({ documents });
+});
+
+// Fetch one saved document in full (used when clicking into a past result)
+app.get('/api/documents/:id', requireAuth, (req, res) => {
+  const documents = loadDocuments();
+  const doc = documents.find(
+    (d) => d.id === req.params.id && d.userId === req.session.userId
+  );
+  if (!doc) {
+    return res.status(404).json({ error: 'Document not found.' });
+  }
+  res.json({
+    id: doc.id,
+    filename: doc.filename,
+    createdAt: doc.createdAt,
+    summary: doc.summary,
+    clauses: doc.clauses,
+    questions: doc.questions,
+  });
 });
 
 // New endpoint: draft a pushback message about the red/ochre flagged clauses (requires sign-in)
