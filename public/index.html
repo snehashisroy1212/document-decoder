@@ -1,0 +1,1132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Decoder — plain-English document review</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0D0C0A;
+    --bg-raised:#17140F;
+    --bg-panel:#131110;
+    --ink:#EFE8DA;
+    --ink-soft:#9A9184;
+    --hairline:#2B271F;
+    --amber:#D9A441;
+    --amber-dim:#8A6B2E;
+    --cream:#EFE7D6;
+    --red:#D9695A;
+    --red-bg:#241512;
+    --ochre:#C99A46;
+    --ochre-bg:#221A0F;
+    --moss:#8FAE82;
+    --moss-bg:#161E14;
+    --scene-glow-1:#26313f;
+    --scene-glow-2:#3a2a12;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  html{scroll-behavior:smooth;}
+  .grain{
+    position:fixed;
+    inset:0;
+    pointer-events:none;
+    opacity:0.05;
+    z-index:50;
+    background-image:
+      repeating-linear-gradient(0deg, rgba(255,255,255,0.03) 0px, rgba(255,255,255,0.03) 1px, transparent 1px, transparent 3px);
+  }
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'IBM Plex Sans',sans-serif;
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  /* ---------- top bar ---------- */
+  .topbar{
+    position:fixed;
+    top:0; left:0; right:0;
+    z-index:40;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:20px 28px;
+    pointer-events:none;
+  }
+  .topbar > *{pointer-events:auto;}
+  .wordmark{
+    font-family:'IBM Plex Sans',sans-serif;
+    font-weight:700;
+    font-size:15px;
+    letter-spacing:-0.01em;
+    color:var(--ink);
+    display:flex;
+    align-items:center;
+    gap:7px;
+  }
+  .wordmark .dot{
+    width:6px;
+    height:6px;
+    border-radius:50%;
+    background:var(--amber);
+    display:inline-block;
+  }
+  .topbar-right{display:flex; align-items:center; gap:18px;}
+  .skip-link, .session-pill{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12px;
+    color:var(--ink-soft);
+    background:none;
+    border:1px solid var(--hairline);
+    border-radius:20px;
+    padding:7px 14px;
+    cursor:pointer;
+    text-decoration:none;
+  }
+  .skip-link:hover{color:var(--ink); border-color:var(--amber-dim);}
+  .session-pill{display:none; align-items:center; gap:10px; color:var(--ink);}
+  .session-pill button{
+    background:none; border:none; color:var(--ink-soft); font-family:'IBM Plex Mono',monospace;
+    font-size:12px; cursor:pointer; padding:0; text-decoration:underline;
+  }
+  .session-pill button:hover{color:var(--amber);}
+
+  /* ---------- scroll-driven intro ---------- */
+  .scroll-stage{
+    position:relative;
+    height:400vh;
+  }
+  .stage-sticky{
+    position:sticky;
+    top:0;
+    height:100vh;
+    overflow:hidden;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  .stage-bg{
+    position:absolute;
+    inset:0;
+    background:radial-gradient(ellipse 700px 500px at 30% 55%, var(--scene-glow-1), transparent 70%),
+               var(--bg);
+    transition:background-color 0.2s linear;
+  }
+  .stage-art{
+    position:absolute;
+    right:6%;
+    bottom:0;
+    width:min(46vw, 560px);
+    opacity:0.9;
+  }
+  .scene{
+    position:relative;
+    z-index:2;
+    max-width:700px;
+    padding:0 28px;
+    opacity:0;
+    transform:translateY(14px);
+    transition:opacity 0.35s ease, transform 0.35s ease;
+    pointer-events:none;
+  }
+  .scene.active{
+    opacity:1;
+    transform:translateY(0);
+    pointer-events:auto;
+  }
+  .scene .kicker{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11.5px;
+    color:var(--amber);
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    margin:0 0 18px;
+  }
+  .scene h1{
+    font-family:'IBM Plex Sans',sans-serif;
+    font-weight:700;
+    font-size:46px;
+    line-height:1.14;
+    letter-spacing:-0.015em;
+    margin:0 0 16px;
+    color:var(--ink);
+  }
+  .scene h1 em{
+    font-style:normal;
+    color:var(--amber);
+  }
+  .scene .sub{
+    font-family:'Source Serif 4',serif;
+    font-size:18px;
+    color:var(--ink-soft);
+    line-height:1.6;
+    max-width:52ch;
+    margin:0;
+  }
+  .scroll-cue{
+    margin-top:34px;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12px;
+    color:var(--ink-soft);
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .scroll-cue svg{width:14px;height:14px;animation:bob 1.6s ease-in-out infinite;}
+  @keyframes bob{0%,100%{transform:translateY(0);}50%{transform:translateY(5px);}}
+
+  @media (prefers-reduced-motion: reduce){
+    html{scroll-behavior:auto;}
+    .scroll-stage{height:auto;}
+    .stage-sticky{position:relative; height:auto; padding:120px 0 80px; flex-direction:column; gap:0;}
+    .scene{display:none; opacity:1; transform:none; pointer-events:auto;}
+    .scene:last-child{display:block;}
+    .scroll-cue{display:none;}
+  }
+
+  /* ---------- shared layout ---------- */
+  .wrap{
+    max-width:760px;
+    margin:0 auto;
+    padding:0 24px 120px;
+    position:relative;
+    z-index:1;
+  }
+  h2{
+    font-family:'IBM Plex Sans',sans-serif;
+    font-weight:700;
+    font-size:21px;
+    margin:0 0 8px;
+    letter-spacing:-0.01em;
+  }
+  button{
+    font-family:'IBM Plex Sans',sans-serif;
+    font-weight:600;
+    font-size:14.5px;
+    background:var(--cream);
+    color:var(--bg);
+    border:none;
+    padding:13px 24px;
+    border-radius:3px;
+    cursor:pointer;
+    letter-spacing:0.005em;
+    transition:background 0.15s ease;
+  }
+  button:hover{background:#fff;}
+  button:disabled{background:#4a463d;color:#a39c8e;cursor:default;}
+
+  /* ---------- auth section ---------- */
+  .auth-section{
+    padding-top:64px;
+    scroll-margin-top:40px;
+  }
+  .auth-card{
+    background:var(--bg-raised);
+    border:1px solid var(--hairline);
+    border-radius:4px;
+    padding:34px;
+    max-width:420px;
+    margin:0 auto;
+  }
+  .auth-kicker{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px;
+    color:var(--amber);
+    letter-spacing:0.1em;
+    text-transform:uppercase;
+    margin:0 0 10px;
+    text-align:center;
+  }
+  .auth-card h2{text-align:center; margin-bottom:6px;}
+  .auth-sub{
+    text-align:center;
+    font-size:13.5px;
+    color:var(--ink-soft);
+    margin:0 0 26px;
+  }
+  .auth-tabs{
+    display:flex;
+    border:1px solid var(--hairline);
+    border-radius:3px;
+    overflow:hidden;
+    margin-bottom:24px;
+  }
+  .auth-tab{
+    flex:1;
+    text-align:center;
+    padding:10px 0;
+    font-size:13.5px;
+    font-weight:500;
+    color:var(--ink-soft);
+    background:none;
+    border:none;
+    border-radius:0;
+    cursor:pointer;
+  }
+  .auth-tab.active{background:var(--bg-panel); color:var(--amber);}
+  .field{margin-bottom:16px;}
+  .field label{
+    display:block;
+    font-size:12.5px;
+    color:var(--ink-soft);
+    margin-bottom:7px;
+    font-family:'IBM Plex Mono',monospace;
+  }
+  .field input{
+    width:100%;
+    background:var(--bg-panel);
+    border:1px solid var(--hairline);
+    border-radius:3px;
+    padding:11px 13px;
+    font-family:'IBM Plex Sans',sans-serif;
+    font-size:14.5px;
+    color:var(--ink);
+    outline:none;
+  }
+  .field input:focus{border-color:var(--amber-dim);}
+  .auth-submit{width:100%; margin-top:6px;}
+  .auth-error{
+    font-size:13px;
+    color:var(--red);
+    margin:0 0 14px;
+    display:none;
+  }
+  .auth-form{display:none;}
+  .auth-form.active{display:block;}
+
+  .signed-in-card{
+    display:none;
+    text-align:center;
+    padding:26px;
+  }
+  .signed-in-card p{
+    font-family:'Source Serif 4',serif;
+    font-size:17px;
+    color:var(--ink);
+    margin:0;
+  }
+  .signed-in-card .amber{color:var(--amber);}
+
+  /* ---------- locked state ---------- */
+  .locked-section{
+    margin-top:64px;
+    border:1px dashed var(--hairline);
+    border-radius:4px;
+    padding:44px 32px;
+    text-align:center;
+  }
+  .locked-section p{
+    font-family:'Source Serif 4',serif;
+    font-size:16.5px;
+    color:var(--ink-soft);
+    margin:0 0 20px;
+  }
+
+  /* ---------- tool section ---------- */
+  .tool-section{padding-top:64px;}
+  .tool-head{margin-bottom:36px;}
+  .tool-head .kicker{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11.5px;
+    color:var(--amber);
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    margin:0 0 14px;
+  }
+  .tool-head h1{
+    font-family:'IBM Plex Sans',sans-serif;
+    font-weight:700;
+    font-size:30px;
+    line-height:1.16;
+    letter-spacing:-0.015em;
+    margin:0 0 14px;
+    color:var(--ink);
+  }
+  .tool-head .sub{
+    font-family:'Source Serif 4',serif;
+    font-size:16px;
+    color:var(--ink-soft);
+    line-height:1.6;
+    max-width:56ch;
+    margin:0;
+  }
+  textarea{
+    width:100%;
+    min-height:280px;
+    background:var(--bg-raised);
+    border:1px solid var(--hairline);
+    border-radius:3px;
+    padding:22px;
+    font-family:'Source Serif 4',serif;
+    font-size:16.5px;
+    line-height:1.6;
+    color:var(--ink);
+    resize:vertical;
+    outline:none;
+  }
+  textarea::placeholder{color:#6b6459;}
+  textarea:focus{border-color:var(--amber-dim);}
+  .row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-top:16px;
+    gap:16px;
+    flex-wrap:wrap;
+  }
+  .row-links{
+    display:flex;
+    align-items:center;
+    gap:18px;
+    flex-wrap:wrap;
+  }
+  .sample-link{
+    background:none;
+    color:var(--ink-soft);
+    padding:0;
+    text-decoration:underline;
+    text-decoration-color:var(--hairline);
+    text-underline-offset:3px;
+    font-weight:400;
+    font-size:13px;
+  }
+  .sample-link:hover{background:none;color:var(--amber); text-decoration-color:var(--amber-dim);}
+  #status{
+    margin-top:18px;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12.5px;
+    color:var(--amber);
+    display:none;
+  }
+  #error{
+    margin-top:18px;
+    font-size:14px;
+    color:var(--red);
+    display:none;
+  }
+  #results{display:none; margin-top:56px;}
+  .results-head{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    border-bottom:1px solid var(--hairline);
+    padding-bottom:16px;
+    margin-bottom:8px;
+  }
+  .verdict-count{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12px;
+    color:var(--ink-soft);
+  }
+  .summary-block{
+    font-family:'Source Serif 4',serif;
+    font-size:17px;
+    line-height:1.65;
+    color:var(--ink);
+    padding:22px 0 32px;
+    border-bottom:1px solid var(--hairline);
+  }
+  .clause{
+    display:grid;
+    grid-template-columns:5px 1fr;
+    gap:20px;
+    padding:24px 0;
+    border-bottom:1px solid var(--hairline);
+  }
+  .clause:last-of-type{border-bottom:none;}
+  .bar{border-radius:2px;}
+  .bar.red{background:var(--red);}
+  .bar.ochre{background:var(--ochre);}
+  .bar.moss{background:var(--moss);}
+  .clause-label{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    margin-bottom:9px;
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
+  .clause-label svg{width:13px; height:13px; flex-shrink:0;}
+  .clause-label.red{color:var(--red);}
+  .clause-label.ochre{color:var(--ochre);}
+  .clause-label.moss{color:var(--moss);}
+  .clause-excerpt{
+    font-family:'Source Serif 4',serif;
+    font-style:italic;
+    font-size:15px;
+    color:var(--ink-soft);
+    line-height:1.5;
+    margin:0 0 11px;
+    padding-left:14px;
+    border-left:2px solid var(--hairline);
+  }
+  .clause-note{
+    font-size:15px;
+    line-height:1.6;
+    margin:0;
+    color:var(--ink);
+  }
+  .questions{margin-top:44px; padding-top:8px;}
+  .questions ul{list-style:none; margin:0; padding:0;}
+  .questions li{
+    display:flex;
+    gap:12px;
+    font-size:15px;
+    line-height:1.55;
+    padding:12px 0;
+    border-bottom:1px solid var(--hairline);
+  }
+  .questions li:last-child{border-bottom:none;}
+  .qmark{font-family:'IBM Plex Mono',monospace; color:var(--amber); flex-shrink:0;}
+  .pushback{margin-top:44px; padding-top:8px;}
+  .pushback-sub{font-size:14px; color:var(--ink-soft); margin:0 0 18px; line-height:1.5;}
+  #pushbackResult{margin-top:24px;}
+  .pushback-card{
+    background:var(--bg-raised);
+    border:1px solid var(--hairline);
+    border-radius:3px;
+    padding:26px;
+  }
+  .pushback-subject{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12px;
+    color:var(--amber);
+    text-transform:uppercase;
+    letter-spacing:0.06em;
+    margin:0 0 14px;
+  }
+  .pushback-body{
+    font-family:'Source Serif 4',serif;
+    font-size:15.5px;
+    line-height:1.65;
+    white-space:pre-wrap;
+    margin:0 0 20px;
+    color:var(--ink);
+  }
+  .copy-btn{
+    background:none;
+    border:1px solid var(--hairline);
+    color:var(--ink-soft);
+    padding:10px 18px;
+    font-size:13px;
+    font-weight:500;
+  }
+  .copy-btn:hover{background:var(--bg-panel);color:var(--ink);}
+  .reset-row{margin-top:48px;}
+  .reset-row button{
+    background:none;
+    color:var(--ink-soft);
+    border:1px solid var(--hairline);
+    padding:11px 20px;
+    font-weight:500;
+  }
+  .reset-row button:hover{background:var(--bg-raised);color:var(--ink);}
+
+  footer{
+    max-width:760px;
+    margin:0 auto;
+    padding:40px 24px 36px;
+    border-top:1px solid var(--hairline);
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:10px;
+    position:relative;
+    z-index:1;
+  }
+  footer p{
+    margin:0;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11.5px;
+    color:var(--ink-soft);
+    letter-spacing:0.01em;
+  }
+
+  @media (max-width:680px){
+    .scene h1{font-size:32px;}
+    .stage-art{width:70vw; opacity:0.5;}
+    .tool-head h1{font-size:25px;}
+  }
+</style>
+</head>
+<body>
+<div class="grain"></div>
+
+<div class="topbar">
+  <span class="wordmark"><span class="dot"></span>Decoder</span>
+  <div class="topbar-right">
+    <a href="#authSection" class="skip-link" id="skipLink">Skip intro</a>
+    <span class="session-pill" id="sessionPill"></span>
+  </div>
+</div>
+
+<section class="scroll-stage" id="scrollStage">
+  <div class="stage-sticky" id="stageSticky">
+    <div class="stage-bg" id="stageBg"></div>
+    <svg class="stage-art" viewBox="0 0 560 560" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <!-- original abstract desk-lamp / document motif -->
+      <g opacity="0.55" stroke="#EFE8DA" stroke-width="1.4" fill="none">
+        <rect x="120" y="60" width="220" height="18" rx="9" fill="none"/>
+        <rect x="120" y="60" width="220" height="1" fill="none" opacity="0"/>
+        <polygon points="140,120 320,120 340,220 120,220" opacity="0.5"/>
+        <line x1="150" y1="150" x2="290" y2="150" opacity="0.35"/>
+        <line x1="150" y1="168" x2="270" y2="168" opacity="0.35"/>
+        <line x1="150" y1="186" x2="300" y2="186" opacity="0.35"/>
+        <path d="M60 480 Q 100 380 220 470" opacity="0.4"/>
+        <circle cx="430" cy="140" r="70" opacity="0.25"/>
+        <path d="M430 210 L430 300" opacity="0.4"/>
+        <path d="M370 300 L490 300" opacity="0.4"/>
+        <rect x="40" y="400" width="480" height="4" opacity="0.3"/>
+        <rect x="90" y="404" width="120" height="90" opacity="0.15" fill="#EFE8DA"/>
+        <rect x="230" y="404" width="80" height="90" opacity="0.12" fill="#EFE8DA"/>
+        <rect x="330" y="404" width="150" height="90" opacity="0.18" fill="#EFE8DA"/>
+      </g>
+    </svg>
+
+    <div class="scene active" data-scene="0">
+      <p class="kicker">Decoder</p>
+      <h1>Nobody actually reads the fine print.</h1>
+      <p class="sub">That's exactly how one-sided clauses make it into the things you sign.</p>
+    </div>
+    <div class="scene" data-scene="1">
+      <h1>Understanding a contract used to mean hiring one.</h1>
+      <p class="sub">Not anymore.</p>
+    </div>
+    <div class="scene" data-scene="2">
+      <h1>Paste it in. Every clause explained — plain English, no guessing.</h1>
+      <p class="sub">Red flags, grey areas, and the standard stuff, sorted out for you.</p>
+    </div>
+    <div class="scene" data-scene="3">
+      <h1>Set up your account below to start <em>decoding</em>.</h1>
+      <div class="scroll-cue">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+        keep scrolling
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="wrap">
+  <section class="auth-section" id="authSection">
+    <div class="auth-card" id="authCard">
+      <p class="auth-kicker">Get started</p>
+      <h2>Create your account</h2>
+      <p class="auth-sub">Free to use. Takes about ten seconds.</p>
+      <div class="auth-tabs">
+        <button class="auth-tab active" id="tabSignup">Sign up</button>
+        <button class="auth-tab" id="tabLogin">Log in</button>
+      </div>
+
+      <p class="auth-error" id="authError"></p>
+
+      <form class="auth-form active" id="signupForm">
+        <div class="field">
+          <label for="suName">Name</label>
+          <input type="text" id="suName" autocomplete="name" required>
+        </div>
+        <div class="field">
+          <label for="suEmail">Email</label>
+          <input type="email" id="suEmail" autocomplete="email" required>
+        </div>
+        <div class="field">
+          <label for="suPassword">Password</label>
+          <input type="password" id="suPassword" autocomplete="new-password" minlength="8" required>
+        </div>
+        <button type="submit" class="auth-submit" id="signupSubmit">Create account</button>
+      </form>
+
+      <form class="auth-form" id="loginForm">
+        <div class="field">
+          <label for="liEmail">Email</label>
+          <input type="email" id="liEmail" autocomplete="email" required>
+        </div>
+        <div class="field">
+          <label for="liPassword">Password</label>
+          <input type="password" id="liPassword" autocomplete="current-password" required>
+        </div>
+        <button type="submit" class="auth-submit" id="loginSubmit">Log in</button>
+      </form>
+    </div>
+
+    <div class="signed-in-card" id="signedInCard">
+      <p>You're signed in as <span class="amber" id="signedInName"></span>. Scroll down to decode a document.</p>
+    </div>
+  </section>
+
+  <section class="locked-section" id="lockedSection">
+    <p>Sign in above to unlock the decoder.</p>
+    <button id="lockedCta">Go to sign up</button>
+  </section>
+
+  <section class="tool-section" id="toolSection" style="display:none;">
+    <div class="tool-head">
+      <p class="kicker">Decoder</p>
+      <h1>Paste the confusing thing.</h1>
+      <p class="sub">Leases, insurance explanations of benefits, terms of service, offer letters, contracts — drop the text in and it comes back clause by clause: what it actually means, what to watch for, and what to ask before you sign or agree.</p>
+    </div>
+    <div class="stage">
+      <textarea id="docInput" placeholder="Paste the document text here — a lease clause, an EOB, a section of terms of service, an offer letter, anything you're being asked to agree to..."></textarea>
+      <div class="row">
+        <button id="analyzeBtn">Decode this</button>
+        <div class="row-links">
+          <input type="file" id="fileInput" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style="display:none;">
+          <button type="button" class="sample-link" id="uploadBtn">Upload a PDF or Word file instead</button>
+          <button type="button" class="sample-link" id="sampleBtn">Try a sample lease clause instead</button>
+        </div>
+      </div>
+      <div id="status"></div>
+      <div id="error"></div>
+    </div>
+    <div id="results">
+      <div class="results-head">
+        <h2>What this actually says</h2>
+        <span class="verdict-count" id="verdictCount"></span>
+      </div>
+      <div class="summary-block" id="summaryBlock"></div>
+      <div id="clauseList"></div>
+      <div class="questions">
+        <h2>Ask before you agree</h2>
+        <ul id="questionList"></ul>
+      </div>
+      <div class="pushback" id="pushbackSection">
+        <h2>Push back on the red flags</h2>
+        <p class="pushback-sub" id="pushbackSub"></p>
+        <button id="pushbackBtn">Draft a message about this</button>
+        <div id="pushbackResult"></div>
+      </div>
+      <div class="reset-row">
+        <button id="resetBtn">Decode another document</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<footer>
+  <p>Decoder · read before you sign</p>
+  <p>your documents are never stored</p>
+</footer>
+
+<script>
+/* ============================= scroll-driven intro ============================= */
+const scenes = Array.from(document.querySelectorAll('.scene'));
+const stageEl = document.getElementById('scrollStage');
+const stageBg = document.getElementById('stageBg');
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function lerpColor(a, b, t){
+  const ah = parseInt(a.slice(1),16), bh = parseInt(b.slice(1),16);
+  const ar = (ah>>16)&255, ag=(ah>>8)&255, ab=ah&255;
+  const br = (bh>>16)&255, bg=(bh>>8)&255, bb=bh&255;
+  const r = Math.round(ar+(br-ar)*t), g = Math.round(ag+(bg-ag)*t), b2 = Math.round(ab+(bb-ab)*t);
+  return `rgb(${r},${g},${b2})`;
+}
+
+if (!reduceMotion && scenes.length) {
+  const numScenes = scenes.length;
+  const glowA = getComputedStyle(document.documentElement).getPropertyValue('--scene-glow-1').trim();
+  const glowB = getComputedStyle(document.documentElement).getPropertyValue('--scene-glow-2').trim();
+
+  function onScroll() {
+    const rect = stageEl.getBoundingClientRect();
+    const stageTop = window.scrollY + rect.top;
+    const scrollable = stageEl.offsetHeight - window.innerHeight;
+    let progress = (window.scrollY - stageTop) / Math.max(scrollable, 1);
+    progress = Math.min(Math.max(progress, 0), 0.999);
+
+    const sceneProgress = progress * numScenes;
+    const activeIndex = Math.floor(sceneProgress);
+
+    scenes.forEach((scene, i) => {
+      scene.classList.toggle('active', i === activeIndex);
+    });
+
+    stageBg.style.background =
+      `radial-gradient(ellipse 700px 500px at 30% 55%, ${lerpColor(glowA, glowB, progress)}, transparent 70%), #0D0C0A`;
+  }
+
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+}
+
+document.getElementById('skipLink').addEventListener('click', (e) => {
+  e.preventDefault();
+  document.getElementById('authSection').scrollIntoView({ behavior: 'smooth' });
+});
+
+/* ============================= auth ============================= */
+const authCard = document.getElementById('authCard');
+const signedInCard = document.getElementById('signedInCard');
+const signedInName = document.getElementById('signedInName');
+const sessionPill = document.getElementById('sessionPill');
+const lockedSection = document.getElementById('lockedSection');
+const toolSection = document.getElementById('toolSection');
+const authError = document.getElementById('authError');
+
+const tabSignup = document.getElementById('tabSignup');
+const tabLogin = document.getElementById('tabLogin');
+const signupForm = document.getElementById('signupForm');
+const loginForm = document.getElementById('loginForm');
+
+tabSignup.addEventListener('click', () => switchTab('signup'));
+tabLogin.addEventListener('click', () => switchTab('login'));
+
+function switchTab(which) {
+  authError.style.display = 'none';
+  tabSignup.classList.toggle('active', which === 'signup');
+  tabLogin.classList.toggle('active', which === 'login');
+  signupForm.classList.toggle('active', which === 'signup');
+  loginForm.classList.toggle('active', which === 'login');
+}
+
+function showAuthError(msg) {
+  authError.textContent = msg;
+  authError.style.display = 'block';
+}
+
+function setAuthenticated(user) {
+  authCard.style.display = 'none';
+  signedInCard.style.display = 'block';
+  signedInName.textContent = user.name;
+
+  sessionPill.style.display = 'flex';
+  sessionPill.innerHTML = `${user.name.split(' ')[0]} &nbsp;·&nbsp; <button id="logoutBtn">Log out</button>`;
+  document.getElementById('logoutBtn').addEventListener('click', logout);
+
+  lockedSection.style.display = 'none';
+  toolSection.style.display = 'block';
+}
+
+function setSignedOut() {
+  authCard.style.display = 'block';
+  signedInCard.style.display = 'none';
+  sessionPill.style.display = 'none';
+  lockedSection.style.display = 'block';
+  toolSection.style.display = 'none';
+}
+
+async function checkSession() {
+  try {
+    const res = await fetch('/api/me');
+    const data = await res.json();
+    if (data.authenticated) {
+      setAuthenticated(data.user);
+    } else {
+      setSignedOut();
+    }
+  } catch {
+    setSignedOut();
+  }
+}
+checkSession();
+
+signupForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  authError.style.display = 'none';
+  const submitBtn = document.getElementById('signupSubmit');
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Creating…';
+  try {
+    const res = await fetch('/api/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: document.getElementById('suName').value,
+        email: document.getElementById('suEmail').value,
+        password: document.getElementById('suPassword').value,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not create your account.');
+    setAuthenticated(data.user);
+    toolSection.scrollIntoView({ behavior: 'smooth' });
+  } catch (err) {
+    showAuthError(err.message);
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Create account';
+  }
+});
+
+loginForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  authError.style.display = 'none';
+  const submitBtn = document.getElementById('loginSubmit');
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Logging in…';
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: document.getElementById('liEmail').value,
+        password: document.getElementById('liPassword').value,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not log you in.');
+    setAuthenticated(data.user);
+    toolSection.scrollIntoView({ behavior: 'smooth' });
+  } catch (err) {
+    showAuthError(err.message);
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Log in';
+  }
+});
+
+async function logout() {
+  await fetch('/api/logout', { method: 'POST' });
+  setSignedOut();
+  document.getElementById('authSection').scrollIntoView({ behavior: 'smooth' });
+}
+
+document.getElementById('lockedCta').addEventListener('click', () => {
+  document.getElementById('authSection').scrollIntoView({ behavior: 'smooth' });
+});
+
+/* ============================= decoder tool (unchanged logic) ============================= */
+const SAMPLE = `10. LATE FEES AND DEFAULT. If Rent is not received by the 3rd day of the month, Tenant shall pay a late fee of $150, plus $25 per additional day of delinquency, which the parties agree is a reasonable estimate of Landlord's damages and not a penalty. Tenant's failure to pay Rent within 5 days of the due date shall constitute a material default, entitling Landlord to terminate this Agreement without further notice and to accelerate all remaining Rent due under the term of this Lease, which shall become immediately due and payable. Landlord may, at its sole discretion, apply any security deposit toward accelerated Rent without waiving any other remedy available at law. Tenant waives any right to a grace period beyond that stated herein.
+14. ALTERATIONS AND SUBLETTING. Tenant shall not make any alterations, improvements, or install any fixtures without Landlord's prior written consent, which may be withheld for any reason or no reason. Any approved alterations become the property of Landlord upon installation and Tenant waives any claim to reimbursement or removal. Subletting or assignment of this Lease is prohibited without Landlord's written consent; a request for such consent shall be accompanied by a non-refundable $200 processing fee regardless of whether consent is granted.`;
+const docInput = document.getElementById('docInput');
+const analyzeBtn = document.getElementById('analyzeBtn');
+const sampleBtn = document.getElementById('sampleBtn');
+const uploadBtn = document.getElementById('uploadBtn');
+const fileInput = document.getElementById('fileInput');
+const statusEl = document.getElementById('status');
+const errorEl = document.getElementById('error');
+const resultsEl = document.getElementById('results');
+const summaryBlock = document.getElementById('summaryBlock');
+const clauseList = document.getElementById('clauseList');
+const questionList = document.getElementById('questionList');
+const verdictCount = document.getElementById('verdictCount');
+const resetBtn = document.getElementById('resetBtn');
+const pushbackSection = document.getElementById('pushbackSection');
+const pushbackSub = document.getElementById('pushbackSub');
+const pushbackBtn = document.getElementById('pushbackBtn');
+const pushbackResult = document.getElementById('pushbackResult');
+let lastFlaggedClauses = [];
+sampleBtn.addEventListener('click', () => {
+  docInput.value = SAMPLE;
+  docInput.focus();
+});
+resetBtn.addEventListener('click', () => {
+  resultsEl.style.display = 'none';
+  errorEl.style.display = 'none';
+  pushbackResult.innerHTML = '';
+  lastFlaggedClauses = [];
+  docInput.value = '';
+  docInput.focus();
+  toolSection.scrollIntoView({ behavior: 'smooth' });
+});
+analyzeBtn.addEventListener('click', analyze);
+pushbackBtn.addEventListener('click', draftPushback);
+
+/* -------- file upload (PDF / DOCX) -------- */
+uploadBtn.addEventListener('click', () => {
+  fileInput.click();
+});
+
+fileInput.addEventListener('change', async () => {
+  const file = fileInput.files[0];
+  if (!file) return;
+
+  errorEl.style.display = 'none';
+  resultsEl.style.display = 'none';
+  uploadBtn.disabled = true;
+  const originalUploadLabel = uploadBtn.textContent;
+  uploadBtn.textContent = 'Reading file…';
+  statusEl.style.display = 'block';
+  statusEl.textContent = `Extracting text from ${file.name}…`;
+
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch('/api/upload', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (response.status === 401) {
+      setSignedOut();
+      throw new Error('Session expired — please sign in again.');
+    }
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Could not read that file.');
+
+    docInput.value = data.text;
+    docInput.focus();
+    statusEl.textContent = `Loaded "${data.filename}" — review below, then decode.`;
+    setTimeout(() => { statusEl.style.display = 'none'; }, 3000);
+  } catch (err) {
+    console.error(err);
+    showError(err.message || 'Could not read that file — try again.');
+    statusEl.style.display = 'none';
+  } finally {
+    uploadBtn.disabled = false;
+    uploadBtn.textContent = originalUploadLabel;
+    fileInput.value = ''; // allow re-selecting the same file later
+  }
+});
+
+async function draftPushback() {
+  if (lastFlaggedClauses.length === 0) return;
+  pushbackBtn.disabled = true;
+  pushbackBtn.textContent = 'Drafting…';
+  pushbackResult.innerHTML = '';
+  try {
+    const response = await fetch('/api/pushback', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        clauses: lastFlaggedClauses,
+        documentContext: summaryBlock.textContent
+      })
+    });
+    if (response.status === 401) { setSignedOut(); throw new Error('Session expired — please sign in again.'); }
+    if (!response.ok) throw new Error('Request failed');
+    const data = await response.json();
+    const card = document.createElement('div');
+    card.className = 'pushback-card';
+    const subject = document.createElement('p');
+    subject.className = 'pushback-subject';
+    subject.textContent = 'Subject: ' + (data.subject || '');
+    const body = document.createElement('p');
+    body.className = 'pushback-body';
+    body.textContent = data.message || '';
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'copy-btn';
+    copyBtn.textContent = 'Copy message';
+    copyBtn.addEventListener('click', () => {
+      navigator.clipboard.writeText(data.message || '');
+      copyBtn.textContent = 'Copied';
+      setTimeout(() => { copyBtn.textContent = 'Copy message'; }, 1800);
+    });
+    card.appendChild(subject);
+    card.appendChild(body);
+    card.appendChild(copyBtn);
+    pushbackResult.appendChild(card);
+  } catch (err) {
+    console.error(err);
+    pushbackResult.innerHTML = `<p style="color:var(--red); font-size:14px;">${err.message || 'Could not draft a message right now — try again.'}</p>`;
+  } finally {
+    pushbackBtn.disabled = false;
+    pushbackBtn.textContent = 'Draft a message about this';
+  }
+}
+
+const LEVEL_META = {
+  red: {
+    label: 'Red flag',
+    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9L2.5 18a1.5 1.5 0 0 0 1.3 2.2h16.4a1.5 1.5 0 0 0 1.3-2.2L13.7 3.9a1.5 1.5 0 0 0-2.6 0z"/></svg>'
+  },
+  ochre: {
+    label: 'Worth a closer look',
+    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="10" r="6.5"/><line x1="15" y1="15" x2="21" y2="21"/></svg>'
+  },
+  moss: {
+    label: 'Standard / fine',
+    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12l5 5L20 6"/></svg>'
+  }
+};
+
+async function analyze() {
+  const text = docInput.value.trim();
+  if (!text) {
+    showError('Paste some document text first.');
+    return;
+  }
+  errorEl.style.display = 'none';
+  resultsEl.style.display = 'none';
+  analyzeBtn.disabled = true;
+  analyzeBtn.textContent = 'Reading…';
+  statusEl.style.display = 'block';
+  statusEl.textContent = 'Reading the document and checking clause by clause…';
+  try {
+    const response = await fetch("/api/decode", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ text })
+    });
+    if (response.status === 401) { setSignedOut(); throw new Error('Session expired — please sign in again.'); }
+    if (!response.ok) {
+      throw new Error('Request failed (' + response.status + ')');
+    }
+    const parsed = await response.json();
+    renderResults(parsed);
+  } catch (err) {
+    console.error(err);
+    showError(err.message === 'Session expired — please sign in again.' ? err.message : "Couldn't read that one — try again, or shorten the pasted text a bit.");
+  } finally {
+    analyzeBtn.disabled = false;
+    analyzeBtn.textContent = 'Decode this';
+    statusEl.style.display = 'none';
+  }
+}
+function showError(msg) {
+  errorEl.textContent = msg;
+  errorEl.style.display = 'block';
+}
+function renderResults(data) {
+  summaryBlock.textContent = data.summary || '';
+  clauseList.innerHTML = '';
+  const counts = {red: 0, ochre: 0, moss: 0};
+  (data.clauses || []).forEach(c => {
+    const level = LEVEL_META[c.level] ? c.level : 'ochre';
+    counts[level]++;
+    const row = document.createElement('div');
+    row.className = 'clause';
+    const bar = document.createElement('div');
+    bar.className = 'bar ' + level;
+    const body = document.createElement('div');
+    const label = document.createElement('div');
+    label.className = 'clause-label ' + level;
+    label.innerHTML = LEVEL_META[level].icon + '<span>' + LEVEL_META[level].label + '</span>';
+    const excerpt = document.createElement('p');
+    excerpt.className = 'clause-excerpt';
+    excerpt.textContent = c.excerpt || '';
+    const note = document.createElement('p');
+    note.className = 'clause-note';
+    note.textContent = c.note || '';
+    body.appendChild(label);
+    body.appendChild(excerpt);
+    body.appendChild(note);
+    row.appendChild(bar);
+    row.appendChild(body);
+    clauseList.appendChild(row);
+  });
+  verdictCount.textContent = `${counts.red} red flag${counts.red===1?'':'s'} · ${counts.ochre} to review · ${counts.moss} standard`;
+  lastFlaggedClauses = (data.clauses || []).filter(c => c.level === 'red' || c.level === 'ochre');
+  pushbackResult.innerHTML = '';
+  if (lastFlaggedClauses.length > 0) {
+    pushbackSection.style.display = 'block';
+    pushbackSub.textContent = `You have ${lastFlaggedClauses.length} clause${lastFlaggedClauses.length === 1 ? '' : 's'} worth raising. Get a ready-to-send message asking to revisit them.`;
+  } else {
+    pushbackSection.style.display = 'none';
+  }
+  questionList.innerHTML = '';
+  (data.questions || []).forEach((q, i) => {
+    const li = document.createElement('li');
+    const mark = document.createElement('span');
+    mark.className = 'qmark';
+    mark.textContent = (i+1) + '.';
+    const span = document.createElement('span');
+    span.textContent = q;
+    li.appendChild(mark);
+    li.appendChild(span);
+    questionList.appendChild(li);
+  });
+  resultsEl.style.display = 'block';
+  resultsEl.scrollIntoView({behavior: 'smooth', block: 'start'});
+}
+</script>
+</body>
+</html>
